@@ -1,0 +1,64 @@
+testbed:
+  credentials:
+    default:
+      username: root
+      password: cisco
+  custom:
+    postcommands:
+{%  for hst in unl_param %}
+      {{ hst | upper}}:
+{%    for route in unl_param[hst].routes %}
+        - ip route {{ route['net_prefix'] | ipaddr('network') }} {{ route['net_prefix'] | ipaddr('netmask') }} {{ route['gw'] }}
+{%    endfor %}
+{%  endfor %}
+      all:
+        - ip domain-name domain.loc
+        - no logging console
+        - aaa new-model
+        - aaa authentication login default local
+        - aaa authorization exec default local
+        - enable password cisco
+        - username root privilege 15 password cisco
+        - line vty 0 4
+        - transport input all
+        - logging synchronous      
+        - line con 0
+        - logging synchronous
+        - crypto key generate rsa modulus 1024
+devices:
+{%  for hst in unl_param %}
+{%    if unl_param[hst].port != '' %}
+  {{ hst | upper }}:
+    type: router
+{%      if unl_param[hst].template == 'csr1000vng' %}
+    os: iosxe
+    platform: iosxe
+{%      elif unl_param[hst].template == 'vios' %}
+    os: ios
+    platform: iosv
+{%      endif %}
+    connections:
+      vty:
+        protocol: telnet
+        port: {{ unl_param[hst].port }}
+        ip: {{ eve_ng_ip_host }}
+{%    endif %}
+{%  endfor %}
+topology:
+{%  for hst in unl_param %}
+{%    if unl_param[hst].interfaces != '' %}
+  {{ hst | upper }}:
+    interfaces:  
+{%      for intrf in unl_param[hst].interfaces %}
+{%        if intrf.int_ipv4 %}
+      {{ intrf['int_name'] }}:
+        type: ethernet
+        ipv4: {{ intrf['int_ipv4'] }}
+        link: Net_{{ intrf['int_net_id'] }}
+{%        if intrf['int_mgmt'] %}
+        description: "Management Interface"
+{%        endif %}
+{%        endif %}
+{%      endfor %}
+{%    endif %}
+{%  endfor %}
