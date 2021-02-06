@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Run telnet from EVE_NG
+# Libs for extract information from openstack
 #
 # alexeykr@gmail.com
 # coding=utf-8
@@ -138,6 +138,21 @@ class ServerInfo:
         )
         return msg
 
+
+class InstanceInfo:
+    """ Class of Instance KVM  """
+
+    def __init__(self, name="", id="", flavor="", nets="", status="", host="", hostname="", instance=""):
+        self.name = name
+        self.inst_id = id
+        self.flavor = flavor
+        self.status = status
+        self.host = host
+        self.hostname = hostname
+        self.instance = instance
+        self.nets = nets
+        self.float_ip = ""
+        self.fixed_ip_address = ""
 
 class Servers:
     """ List of Servers """
