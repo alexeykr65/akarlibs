@@ -1,0 +1,170 @@
+{       
+    "templateName": "{{ val.name }}",
+    "templateDescription": "{{ val.descr }}",
+    "templateMinVersion": "15.0.0",
+    "factoryDefault": false,
+    "configType": "xml",
+    "templateType": "vpn-vedge",
+    "deviceType": [ 
+            "{{ val.dv_type[0] }}"
+            {%  if val.dv_type|length > 1 %}
+                ,"{{ val.dv_type[1] }}"
+            {% endif %}
+        ],
+    "templateDefinition": {
+        "vpn-id": {
+            "vipObjectType": "object",
+            "vipType": "constant",
+            "vipValue": {{ val.vpn_id }}
+        },
+        "name": {
+            "vipObjectType": "object",
+            "vipType": "constant",
+            "vipValue": "{{ val.vpn_name }}",
+            "vipVariableName": "vpn_name"
+        },
+        "ecmp-hash-key": {
+            "layer4": {
+                "vipObjectType": "object",
+                "vipType": "ignore",
+                "vipValue": "false",
+                "vipVariableName": "vpn_layer4"
+            }
+        },
+        "tcp-optimization": {
+            "vipObjectType": "node-only",
+            "vipType": "ignore",
+            "vipValue": "false",
+            "vipVariableName": "vpn_tcp_optimization"
+        },
+        "nat64-global": {
+            "prefix": {
+                "stateful": {}
+            }
+        },
+        "nat64": {
+            "v4": {
+                "pool": {
+                    "vipType": "ignore",
+                    "vipValue": [],
+                    "vipObjectType": "tree",
+                    "vipPrimaryKey": [
+                        "name"
+                    ]
+                }
+            }
+        },
+        "host": {
+            "vipType": "ignore",
+            "vipValue": [],
+            "vipObjectType": "tree",
+            "vipPrimaryKey": [
+                "hostname"
+            ]
+        },
+        "service": {
+            "vipType": "ignore",
+            "vipValue": [],
+            "vipObjectType": "tree",
+            "vipPrimaryKey": [
+                "svc-type"
+            ]
+        },
+        "ip": {
+            "route": {
+                {% for rt in val.routes %}
+                "vipType": "constant",
+                "vipValue": [
+                    {
+                        "prefix": {
+                            "vipObjectType": "object",
+                            "vipType": "constant",
+                            "vipValue": "{{ rt.prefix }}",
+                            "vipVariableName": "{{ rt.prefix_var_name }}"
+                        },
+                        "next-hop": {
+                            "vipType": "constant",
+                            "vipValue": [
+                                {
+                                    "address": {
+                                        "vipObjectType": "object",
+                                        "vipType": "variableName",
+                                        "vipValue": "",
+                                        "vipVariableName": "{{rt.next_hop_var_name}}"
+                                    },
+                                    "distance": {
+                                        "vipObjectType": "object",
+                                        "vipType": "ignore",
+                                        "vipValue": "{{rt.distance_val}}",
+                                        "vipVariableName": "{{rt.distance_var_name}}"
+                                    },
+                                    "priority-order": [
+                                        "address",
+                                        "distance"
+                                    ]
+                                }
+                            ],
+                            "vipObjectType": "tree",
+                            "vipPrimaryKey": [
+                                "address"
+                            ]
+                        },
+                        "priority-order": [
+                            "prefix",
+                            "next-hop"
+                        ]
+                    }
+                ],
+                "vipObjectType": "tree",
+                "vipPrimaryKey": [
+                    "prefix"
+                ]
+                {% endfor %}
+            },
+            "gre-route": {},
+            "ipsec-route": {}
+        },
+        "ipv6": {},
+        "omp": {
+        {%  if val.omp %}
+            "advertise": {
+                "vipType": "constant",
+                "vipValue": [
+                    {
+                        "priority-order": [
+                            "protocol"
+                        ],
+                        "protocol": {
+                            "vipType": "constant",
+                            "vipValue": "static",
+                            "vipObjectType": "object"
+                        }
+                    },
+                    {
+                        "priority-order": [
+                            "protocol"
+                        ],
+                        "protocol": {
+                            "vipType": "constant",
+                            "vipValue": "connected",
+                            "vipObjectType": "object"
+                        }
+                    }
+                ],
+                "vipObjectType": "tree",
+                "vipPrimaryKey": [
+                    "protocol"
+                ]
+            },
+            "ipv6-advertise": {
+                "vipType": "ignore",
+                "vipValue": [],
+                "vipObjectType": "tree",
+                "vipPrimaryKey": [
+                    "protocol"
+                ]
+            }
+        {% endif %}
+        }
+    }
+}

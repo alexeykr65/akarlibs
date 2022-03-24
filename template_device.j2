@@ -1,0 +1,69 @@
+{
+    "templateName": "{{ val.name }}",
+    "templateDescription": "{{ val.descr }}",
+    "deviceType": "vedge-cloud",
+    "configType": "template",
+    "factoryDefault": false,
+    "policyId": "",
+    "featureTemplateUidRange": [],
+    "connectionPreferenceRequired": true,
+    "connectionPreference": true,
+    "generalTemplates": [
+        {
+            "templateName": {{ val.dev_aaa }},
+            "templateType": "aaa"
+        },
+        {
+            "templateName": "Factory_Default_BFD_Template",
+            "templateType": "bfd-vedge"
+        },
+        {
+            "templateName": "Factory_Default_vEdge_OMP_Template",
+            "templateType": "omp-vedge"
+        },
+        {
+            "templateName": "Factory_Default_vEdge_Security_Template",
+            "templateType": "security-vedge"
+        },
+        {
+            "templateName": "Factory_Default_vEdge_System_Template",
+            "templateType": "system-vedge",
+            "subTemplates": [
+                {
+                    "templateName": "Factory_Default_Logging_Template",
+                    "templateType": "logging"
+                }
+            ]
+        },
+        {
+            "templateName": "VPN_0",
+            "templateType": "vpn-vedge",
+            "subTemplates": [
+                {
+                    "templateName": "VPN0_interfaces_1",
+                    "templateType": "vpn-vedge-interface"
+                }
+            ]
+        },
+        {
+            "templateName": "VPN512",
+            "templateType": "vpn-vedge",
+            "subTemplates": [
+                {
+                    "templateName": "VPN512_Interfaces_1",
+                    "templateType": "vpn-vedge-interface"
+                }
+            ]
+        },
+        {
+            "templateName": "VPN10_basic",
+            "templateType": "vpn-vedge",
+            "subTemplates": [
+                {
+                    "templateName": "vpn10_int_2",
+                    "templateType": "vpn-vedge-interface"
+                }
+            ]
+        }
+    ]
+}

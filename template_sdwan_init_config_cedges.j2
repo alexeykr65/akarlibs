@@ -1,0 +1,47 @@
+config-transaction
+  system
+    system-ip {{ val.sys_ip }}
+    site-id   {{ site_id }}
+    admin-tech-on-failure
+    sp-organization-name  "{{ org }}"
+    organization-name     "{{ org }}"
+    vbond {{ bond_ip }}
+  exit
+  clock timezone UTC +3
+  ntp server 0.pool.ntp.org
+  hostname {{ val.name }}
+  interface GigabitEthernet1
+    no shutdown
+    ip address dhcp
+  exit
+  interface {{ val.int_vpn0 }}
+    ip address {{ val.vpn0_ip}} 255.255.255.0
+    no shutdown
+  exit
+  interface Tunnel0
+    no shutdown
+    ip unnumbered {{ val.int_vpn0 }}
+    tunnel source {{ val.int_vpn0 }}
+    tunnel mode sdwan
+  exit
+{% if val.add_routes| length > 0 %}
+  {% for rt in val.add_routes %}
+  ip route {{ rt }}
+  {% endfor %}
+{% endif %}
+{% if val.default_route_vpn0|length > 0 %}
+  ip route 0.0.0.0 0.0.0.0 {{ val['default_route_vpn0'] }}
+{% endif %}
+
+sdwan
+ interface {{ val.int_vpn0 }}
+  tunnel-interface
+   encapsulation ipsec
+   color default
+  exit
+ exit
+ !
+!
+commit
+end
+

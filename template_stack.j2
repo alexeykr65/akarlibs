@@ -1,0 +1,395 @@
+heat_template_version: rocky
+# test template
+parameters:
+    key_name:
+        type: string
+        label: Key Name
+        default: mykey
+    mgmt_wan:
+        type: string
+        label: Image ID
+        default: {{ net_mgmt }}
+    avail_zone:
+        type: string
+        label: Image ID
+        default: {{ avail_zone }}
+{% for dv, val in dvsinfo.imgs_info.items() %}
+    {{dv}}_image:
+        type: string
+        label: Image ID
+        default: {{ val.image }}
+    {{dv}}_flavor:
+        type: string
+        label: Image ID
+        default: {{ val.flavor }}
+{% endfor %}
+    asa_config:
+      type: string
+      default: |
+        hostname ROUTER
+        crypto key generate rsa general-keys modulus 2048
+        aaa authentication ssh console LOCAL
+        aaa authorization exec LOCAL auto-enable
+        username root password cisco  privilege 15
+        enable password cisco
+        interface Management0/0
+          management-only
+          nameif management
+          security-level 0
+          ip address dhcp setroute
+        ssh 0.0.0.0 0.0.0.0 management
+        ssh version 2
+        username root attributes
+          ssh authentication publickey b3:34:0d:f7:f8:43:f2:35:66:a3:1a:66:ef:b1:cd:16:21:e6:ee:d5:0c:8b:bd:ae:7f:84:43:10:2f:7e:a2:22 hashed
+
+    csr_config:
+        type: string
+        default: |
+          hostname ROUTER
+          username root privilege 15 password cisco
+          ip domain name lab.lanhome.org
+          crypto key generate rsa modulus 1024
+          cdp run
+          ipv6 unicast-routing
+          vrf definition MGMT
+           !
+           address-family ipv4
+           exit-address-family
+           !
+           address-family ipv6
+           exit-address-family
+          
+          interface GigabitEthernet1
+           vrf forwarding MGMT
+           ip address dhcp
+           !ipv6 address dhcp rapid-commit
+           !ipv6 enable
+           !ipv6 nd autoconfig prefix
+           !ipv6 nd autoconfig default-route
+           !ipv6 nd ra suppress all
+           no shutdown
+
+          interface GigabitEthernet2
+           IPV6G1
+           IPV4G1           
+           no shutdown
+           cdp enable
+
+          interface GigabitEthernet3
+           IPV6G2
+           IPV4G2           
+           no shutdown
+           cdp enable
+
+          interface GigabitEthernet4
+           IPV6G3
+           IPV4G3           
+           no shutdown
+           cdp enable
+
+          interface GigabitEthernet5
+           IPV6G4
+           IPV4G4           
+           no shutdown
+           cdp enable
+
+          interface GigabitEthernet6
+           IPV6G5
+           IPV4G5           
+           no shutdown
+           cdp enable
+
+          interface GigabitEthernet7
+           IPV6G6
+           IPV4G6           
+           no shutdown
+           cdp enable
+
+          ip ssh version 2
+          !router ospf 10
+          !  network 0.0.0.0 0.0.0.0 area 0
+          ip ssh pubkey-chain
+            username root
+             key-hash ssh-rsa 1767589A4625B0AB60160A4219378B93
+          
+          line vty 0 4
+           login local
+           exec-timeout 60 0
+           transport input ssh
+
+resources:
+#=============================== Create Cloud-Init ===============================
+{% for rt_name, rt_value in dvsinfo.srvs_info.items() %}
+  {% if rt_value.cloud_init_cloudconfig|length > 0 %}
+##################################################################
+# create Cloud-Init  {{ rt_name }} {{ rt_value.dev_name }}
+##################################################################
+    cloudconfig-{{ rt_name }}:
+      type: OS::Heat::CloudConfig
+      properties:
+        cloud_config:
+      {% for val in rt_value.cloud_init_cloudconfig %}
+          {{ val }}
+      {% endfor %}
+  {% endif %}
+{% endfor %}
+
+#=============================== Create Servers ===============================
+{% for rt_name, rt_value in dvsinfo.srvs_info.items() %}
+##################################################################
+# create server {{ rt_name }} {{ rt_value.dev_name }}
+##################################################################
+    {% if rt_value.dev_type == 'vmanage' %}
+    init_{{ rt_value.dev_name }}:
+      type: OS::Cinder::Volume
+      properties:
+        name: 
+          list_join: ['-', [{ get_param: "OS::stack_name" }, "vol", "{{ rt_value.dev_name }}"] ] 
+        size: 100
+    {% endif %}    
+
+    {{ rt_name }}:
+      type: OS::Nova::Server 
+      properties:
+    {% if rt_value.dev_host|length > 0 %}
+        availability_zone: {{ rt_value.dev_host }}
+    {% else %}
+        availability_zone: { get_param: avail_zone }
+    {% endif %}
+        image: { get_param: {{ rt_value.dev_type }}_image }
+        flavor: { get_param: {{ rt_value.dev_type }}_flavor }
+        key_name: { get_param: key_name }
+    {% if rt_value.dev_group|length > 0 %}
+        metadata: { group: {{rt_value.dev_group}}, ansible_name: {{rt_value.dev_name}} }
+        {# tags: [{{rt_value.dev_group}}] #}
+    {% endif %}
+        name:
+          list_join: ['_', [{ get_param: "OS::stack_name" }, "{{ rt_value.dev_name }}"] ] 
+    {% if rt_value.dev_type == 'vmanage' %}
+        block_device_mapping: 
+          - { device_name: 'vdb', volume_id: { get_resource: init_{{ rt_value.dev_name }} }, delete_on_termination: true }
+    {% endif %}
+    {% if rt_value.cloud_init_cloudconfig|length > 0 %}
+        user_data_format: RAW
+        user_data: { get_resource: cloudconfig-{{ rt_name }} }
+      {% endif %}
+        networks:
+          - port: { get_resource: {{ rt_name }}_MGMT_port }
+{%    for nt_name, nt in rt_value.links.items() %}
+          - port: { get_resource: {{ rt_name }}_{{ nt.name }}_port }
+{%    endfor %}
+{% endfor %}
+
+#=============================== Create Routers ===============================
+{% for rt_name, rt_value in dvsinfo.rtrs_info.items() %}
+##################################################################
+# create router {{ rt_name }} and init
+##################################################################
+    {% if rt_value.dev_type == 'vios' or rt_value.dev_type == 'viosl2' %}
+    init_{{ rt_name }}:
+      type: OS::Cinder::Volume
+      properties:
+        image: "vios_initv4"
+        name: 
+          list_join: ['-', [{ get_param: "OS::stack_name" }, "vol-init", "{{ rt_name }}"] ] 
+        size: 1
+    {% endif %}
+
+    {{ rt_name }}: 
+      type: OS::Nova::Server 
+      properties: 
+        image: { get_param: {{ rt_value.dev_type }}_image}
+        flavor: { get_param: {{ rt_value.dev_type }}_flavor}
+        key_name: { get_param: key_name }
+    {% if rt_value.dev_group|length > 0 %}
+        metadata: { group: {{ rt_value.dev_group }}, ansible_name: {{rt_value.dev_name}}, name_intrf: {{dvsinfo.imgs_info[rt_value.dev_type].name_intrf}}, platform: {{dvsinfo.imgs_info[rt_value.dev_type].platform}} }
+        {# tags: [{{rt_value.dev_group}}] #}
+    {% endif %}
+    {% if rt_value.dev_host|length > 0 %}
+        availability_zone: {{ rt_value.dev_host }}
+    {% else %}
+        availability_zone: { get_param: avail_zone }
+    {% endif %}
+        config_drive: True
+        name: 
+          list_join: ['_', [{ get_param: "OS::stack_name" }, "{{ rt_value.dev_name }}"] ] 
+    {% if rt_value.dev_type == 'csr' %}
+        personality: 
+          "iosxe_config.txt": { str_replace_strict: { template: {get_param: csr_config}, params: { 
+                    ROUTER: "{{ rt_name }}",
+{%         for nt_name, net in rt_value.links.items() %}
+{%              if net.ipv6|length %}
+                    IPV6G{{ net.count }}: "ipv6 address {{ net.ipv6_addr }}/{{ net.ipv6 | ipaddr('prefix') }}\nipv6 enable",
+{%              endif %}
+{%              if net.ipv4|length %}
+                    IPV4G{{ net.count }}: "ip address {{ net.ipv4_addr }} {{ net.ipv4 | ipaddr('netmask') }} ",
+{%              endif %}
+{%         endfor %}
+                 } }}
+    {% endif %}
+    {% if rt_value.dev_type == 'asa' %}
+        personality: 
+          "day0-config": { str_replace_strict: { template: {get_param: asa_config}, params: { 
+                    ROUTER: "{{ rt_name }}",
+                 } }}
+    {% endif %}
+    {% if rt_value.dev_type == 'vios' %}
+        block_device_mapping: 
+          - { device_name: 'vdb', volume_id: { get_resource: init_{{ rt_name }} }, delete_on_termination: true }
+    {% endif %}
+        networks:
+          - port: { get_resource: {{ rt_name }}_MGMT_port }
+{%    for nt_name, nt in rt_value.links.items() %}
+          - port: { get_resource: {{ rt_name }}_{{ nt.name }}_port }
+{%    endfor %}
+
+{% endfor %}
+
+#=============================== Create Networks ===============================
+{% for net_name, net in dvsinfo.links_info.items() %}
+{% if  net.connected_link|length == 0 %}
+##################################################################
+# create network {{ net_name }}
+##################################################################
+    {{ net.name }}:
+      type: OS::Neutron::Net
+      properties: 
+        port_security_enabled: false
+        name: 
+          list_join: ['_', [{ get_param: "OS::stack_name" }, '{{ net.name }}'] ]
+
+{%      if net.ipv4|length %}
+    {{ net.name }}_sub_ipv4:
+      type: OS::Neutron::Subnet
+      depends_on: [ {{ net.name }} ]
+      properties:
+        name: 
+          list_join: ['_', [{ get_param: "OS::stack_name" }, '{{ net.name }}_sub_ipv4'] ]
+        gateway_ip: null
+{%        if  net.dhcp_srv  %}
+        enable_dhcp: True
+{%        else  %}
+        enable_dhcp: False
+{%        endif %}
+        network: {get_resource: {{ net.name }}}
+        ip_version: 4
+        cidr: {{ net.ipv4 }}
+{%      endif %}
+
+{%      if net.ipv6|length %}
+    {{ net.name }}_sub_ipv6:
+      type: OS::Neutron::Subnet
+      depends_on: [ {{ net.name }} ]
+      properties:
+        name: 
+          list_join: ['_', [{ get_param: "OS::stack_name" }, '{{ net.name }}_sub_ipv6'] ]
+        gateway_ip: null
+{%        if  net.dhcp_srv %}
+        enable_dhcp: True
+{%        else  %}
+        enable_dhcp: False
+{%        endif %}
+        network: {get_resource: {{ net.name }}}
+        ip_version: 6
+        cidr: {{ net.ipv6 }}
+{%      endif %}
+{% else %}
+##################################################################
+# Connected Network: {{ net.connected_link }}
+################################################################## 
+{% endif %}
+{% endfor %}
+#=============================== Create Ports for Routers ===============================
+{% for rt_name, rt_value in dvsinfo.rtrs_info.items() %}
+##################################################################
+# create ports for {{ rt_name }}  
+##################################################################
+{%    for nt_name,nt in rt_value.links.items() %}
+    {{ rt_name }}_{{ nt.name }}_port:
+      type: OS::Neutron::Port
+      {% if nt.connected_link|length == 0 %}
+      depends_on: [ {{ nt.name }} ]
+      {% endif %}
+      properties:
+        {% if nt.connected_link|length > 0 %}
+        network:  {{ nt.connected_link }}
+        {% else %}
+        network: { get_resource: {{ nt.name }} }
+        {% endif %}
+        port_security_enabled: false
+        name: 
+          list_join: ['_', [{ get_param: "OS::stack_name" }, '{{ rt_name }}_{{ nt.name }}_port'] ]
+        fixed_ips: 
+{%      if nt.ipv4|length %}
+          - ip_address: '{{ nt.ipv4_addr }}'
+{%      endif %}
+{%      if nt.ipv6|length %}
+          - ip_address: '{{ nt.ipv6_addr }}'
+{%      endif %}
+{%    endfor %}
+{% endfor %}
+#=============================== Create Ports for Servers ===============================
+{% for rt_name, rt_value in dvsinfo.srvs_info.items() %}
+##################################################################
+# create ports for {{ rt_name }} {{ rt_value.dev_name }}
+##################################################################
+
+{%    for nt_name,nt in rt_value.links.items() %}
+    {{ rt_name }}_{{ nt.name }}_port:
+      type: OS::Neutron::Port
+      depends_on: [ {{ nt.name }} ]
+      properties:
+        network: { get_resource: {{ nt.name }} }
+        port_security_enabled: false
+        name: 
+          list_join: ['_', [{ get_param: "OS::stack_name" }, '{{ rt_value.dev_name }}_{{ nt.name }}_port'] ]
+        fixed_ips: 
+{%      if nt.ipv4|length %}
+          - ip_address: '{{ nt.ipv4_addr }}'
+{%      endif %}
+{%      if nt.ipv6|length %}
+          - ip_address: '{{ nt.ipv6_addr }}'
+{%      endif %}
+{%    endfor %}
+{% endfor %}
+
+#=============================== Create Ports for MGMT Servers/Routers ===============================
+{% for rt_name, rt_value in dvsinfo.srvs_info.items() %}
+##################################################################
+# create MGMT port for {{ rt_name }} name: {{ rt_value.dev_name }}
+##################################################################
+    {{ rt_name }}_MGMT_port:
+      type: OS::Neutron::Port
+      properties:
+        network: { get_param: mgmt_wan }
+        port_security_enabled: false
+        name:
+          list_join: ['_', [{ get_param: "OS::stack_name" }, '{{ rt_value.dev_name }}_MGMT_port'] ]
+        fixed_ips:
+{%      if rt_value.dev_mgmt_ipv4|length %}
+          - ip_address: '{{ rt_value.dev_mgmt_ipv4 }}'
+{%      endif %}
+{%      if rt_value.dev_mgmt_ipv6|length %}
+          - ip_address: '{{ rt_value.dev_mgmt_ipv6 }}'
+{%      endif %}
+{% endfor %}
+
+{% for rt_name, rt_value in dvsinfo.rtrs_info.items() %}
+##################################################################
+# create MGMT port for {{ rt_name }} name: {{ rt_value.dev_name }}
+##################################################################
+    {{ rt_name }}_MGMT_port:
+      type: OS::Neutron::Port
+      properties:
+        network: { get_param: mgmt_wan }
+        port_security_enabled: false
+        name:
+          list_join: ['_', [{ get_param: "OS::stack_name" }, '{{ rt_value.dev_name }}_MGMT_port'] ]
+        fixed_ips:
+{%      if rt_value.dev_mgmt_ipv4|length %}
+          - ip_address: '{{ rt_value.dev_mgmt_ipv4 }}'
+{%      endif %}
+{%      if rt_value.dev_mgmt_ipv6|length %}
+          - ip_address: '{{ rt_value.dev_mgmt_ipv6 }}'
+{%      endif %}
+{% endfor %}

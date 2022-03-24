@@ -32,13 +32,20 @@ class KvmInterfaceInfo:
 class KvmInstanceInfo:
     """ Class of Flavors """
 
-    def __init__(self, xml_string="", name_instance="", uri_qemu="", dbg=logging.INFO):
+    def __init__(self, xml_string="", name_instance="", uri_qemu="", dbg=logging.WARNING):
         self.name = name_instance
         self.uri_qemu = uri_qemu
         self.xml = xml_string
         self.uuid = ""
         self.nova_name = ""
         self.interfaces = dict()
+        self.vm_vcpus = ""
+        self.vm_memory = ""
+        self.vm_disk = ""
+        self.vm_vnc_port = ""
+        self.vm_vnc_uri = ""
+        self.vm_serial_port = ""
+
         self.__logger = AkarLogging(dbg, "kvminstanceinfo").get_color_logger()
         if self.name and self.uri_qemu:
             self.xml = self.get_xml_description()
@@ -57,9 +64,15 @@ class KvmInstanceInfo:
 
         ns = {"nova": "http://openstack.org/xmlns/libvirt/nova/1.0"}
         name_nova = tree.find(".//nova:name", ns)
+        self.vm_vcpus = tree.find(".//nova:vcpus", ns).text
+        self.vm_memory = tree.find(".//nova:memory", ns).text
+        self.vm_disk = tree.find(".//nova:disk", ns).text
         self.nova_name = name_nova.text
         self.__logger.info(f"Nova name: {name_nova.text}")
         # get all info of interfaces
+        self.vm_vnc_port = tree.find("./devices/graphics", ns).get("port")
+        self.vm_serial_port = tree.find("./devices/serial/source", ns).get("service")
+        # print(f'Port: {vm_port}')
         elements = tree.findall("./devices/interface", ns)
         self.__logger.info(f"Total found interfaces: {len(elements)}")
         for elem in elements:

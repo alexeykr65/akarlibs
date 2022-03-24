@@ -1,0 +1,34 @@
+config
+  system
+   host-name {{ val.name }}
+   system-ip {{ val.sys_ip }}
+   site-id   {{ site_id }}
+   admin-tech-on-failure
+   sp-organization-name  "{{ org }}"
+   organization-name     "{{ org }}"
+   clock timezone Europe/Moscow
+  {% if val.dv_type == 'vbond' %}
+   vbond {{ bond_ip }} local vbond-only
+  {% else %}
+   vbond {{ bond_ip }}
+  {% endif %}
+   ntp
+    server 0.pool.ntp.org
+     version 4
+    exit
+  !
+  vpn 0
+  {% if val.default_route_vpn0|length > 0 %}
+   ip route 0.0.0.0/0 {{ val['default_route_vpn0'] }}
+  {% endif %}
+   interface {{ val.int_vpn0 }}
+    ip address {{ val.vpn0_ip}}/24
+    no tunnel-interface
+    no shutdown
+  !
+  vpn 512
+   interface {{ val.int_mgmt }}
+    ip dhcp-client
+    no shutdown
+  !
+  commit and-quit
