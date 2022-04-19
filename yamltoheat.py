@@ -55,14 +55,20 @@ class LinkInfo:
 class ImageInfo:
     """ Class of Router Info """
 
-    def __init__(self, name, flavor_id="", image="", dev_type="routers", init_img="", name_intrf="", plat=""):
+    def __init__(self, name, **kwargs):
+        # flavor_id="", image="", dev_type="routers", init_img="", name_intrf="", plat=""
         self.name = name
-        self.dev_type = dev_type
-        self.flavor = flavor_id
-        self.image = image
-        self.init_img = init_img
-        self.name_intrf = name_intrf
-        self.platform = plat
+        self.dev_type = kwargs.get('dev_type') or "routers"
+        self.flavor = kwargs.get('flavor_id') or ""
+        self.image = kwargs.get('image') or ""
+        self.init_img = kwargs.get('init_img') or ""
+        self.name_intrf = kwargs.get('name_intrf') or ""
+        self.platform = kwargs.get('plat') or "" 
+        self.volume_enable = kwargs.get('vol_en') or False
+        self.volume_image = kwargs.get('vol_img') or False
+        self.volume_device = kwargs.get('vol_dev') or "vda"
+        self.volume_size = kwargs.get('vol_size') or 100
+
 
     def __str__(self):
         msg = f'{self.name:10s} {self.dev_type:20s} {self.flavor:20s} {self.image:20s} {self.init_img:20s}'
@@ -98,6 +104,7 @@ class RouterInfo:
         self.dev_mgmt_ipv6 = ""
         self.dev_host = ""
         self.platform = ""
+        self.flavor = val.get('flavor') or ""
         if 'os_host' in val:
             self.dev_host = val['os_host']
         if 'group' in val:
@@ -110,8 +117,8 @@ class RouterInfo:
             self.dev_name = val['name']
 
         id_rtr = 100 + int(re.match(r'^[^\d]*(\d*)', self.name_router).group(1))
-        count = 1
-        for ln in val['links']:
+
+        for count, ln in enumerate(val['links'],1):
             self.links[ln] = dict()
             self.links[ln]['name'] = "link_" + str(ln)
             self.links[ln]['connected_link'] = net[ln].connected_link
@@ -125,8 +132,6 @@ class RouterInfo:
                 self.links[ln]['ipv6'] = net[ln].ipv6
                 ip = str(IPNetwork(net[ln].ipv6)[id_rtr + 156])
                 self.links[ln]['ipv6_addr'] = ip
-                # print(f'{}')
-            count += 1
 
     def __str__(self):
         msg = f'{self.name_router:10s} {self.dev_type:10s} LINKS: {str(self.links):20s} '
@@ -139,29 +144,21 @@ class ServerInfo:
     def __init__(self, name, val, net):
         self.name_srv = name
         self.dev_type = val['type']
-        self.dev_name = name
-        self.dev_group = ""
-        self.dev_mgmt_ipv4 = ""
-        self.dev_mgmt_ipv6 = ""
-        self.dev_host = ""
+        self.dev_name = val.get('name') or name
+        self.dev_host = val.get('os_host') or ""
+        self.dev_group = val.get('group') or "other"
+        self.dev_mgmt_ipv6 = val.get('mgmt_ipv6') or ""
+        self.dev_mgmt_ipv4 = val.get('mgmt_ipv4') or ""
+        self.mac_address = val.get('mac_address') or ""
+        self.flavor = val.get('flavor') or ""
         self.cloud_init_cloudconfig = ""
         if 'cloud_init' in val:
             if 'cloud_config' in val['cloud_init']:
                 self.cloud_init_cloudconfig = val['cloud_init']['cloud_config'].split("\n")
-        if 'os_host' in val:
-            self.dev_host = val['os_host']
-        if 'group' in val:
-            self.dev_group = val['group']
-        if 'mgmt_ipv6' in val:
-            self.dev_mgmt_ipv6 = val['mgmt_ipv6']
-        if 'mgmt_ipv4' in val:
-            self.dev_mgmt_ipv4 = val['mgmt_ipv4']
-        if 'name' in val:
-            self.dev_name = val['name']
+
         self.links = dict()
         id_rtr = int(re.match(r'^[^\d]*(\d*)', self.name_srv).group(1))
-        count = 1
-        for ln in val['links']:
+        for count, ln in enumerate(val['links'],1):
             self.links[ln] = dict()
             self.links[ln]['name'] = "link_" + str(ln)
             self.links[ln]['count'] = str(count)
@@ -174,8 +171,7 @@ class ServerInfo:
                 self.links[ln]['ipv6'] = net[ln].ipv6
                 ip = str(IPNetwork(net[ln].ipv6)[id_rtr + 512])
                 self.links[ln]['ipv6_addr'] = ip
-                # print(f'{}')
-            count += 1
+
 
     def __str__(self):
         msg = f'{self.name_srv:10s} {self.dev_type:10s} {str(self.links):20s} '
@@ -210,8 +206,17 @@ class DevicesInfo:
                 # if 'init_img' in inf:
                 #     init_img = inf['init_img']
                 self.imgs_info[nm] = ImageInfo(
-                    name=nm, flavor_id=inf['flavor'], image=inf['image'], dev_type=key, init_img=init_img, name_intrf=name_intrf, plat=plat
-                )
+                    name=nm, 
+                    flavor_id=inf.get('flavor'), 
+                    image=inf.get('image'), 
+                    dev_type=key, 
+                    init_img=inf.get('init_img'), 
+                    name_intrf=inf.get('name_intrf'), 
+                    plat=inf.get('platform'),
+                    vol_en = inf.get('volume_enable'),
+                    vol_img = inf.get('volume_image'),
+                    vol_dev = inf.get('volume_device')
+                    )
 
         # Analyze network links
         for key, val in conf_yaml["networks"].items():
@@ -266,7 +271,7 @@ class YamlToHeat:
         return ret
 
     def __init__(self, dvs_info, net_mgmt="wan0", avail_zone="nova:osc", dbg=logging.INFO):
-        self.__logger = AkarLogging(dbg, "openstacklab").get_color_logger()
+        self.__logger = AkarLogging(dbg, "YamlToHeat").get_color_logger()
         self.dvs_info = dvs_info
         self.net_mgmt = net_mgmt
         self.avail_zone = avail_zone
@@ -298,6 +303,7 @@ class YamlToHeat:
         env.rstrip_blocks = True
         # env.filters['ipaddr'] = self.ipaddr
         template = env.get_template(self.heat_template_file)
+        # print(f'dvs_info {self.net_mgmt}')
         output = template.render(dvsinfo=self.dvs_info, net_mgmt=self.net_mgmt, avail_zone=self.avail_zone)
         with open(self.heat_file_name, mode="w") as file_:
             file_.write(output)

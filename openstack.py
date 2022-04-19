@@ -153,11 +153,11 @@ class ServerInfo:
         self.mgmt_name = list(nets.keys())[0]
         self.mgmt_ip = nets[self.mgmt_name]['ipv4']
         self.srv_group = srv.metadata.get('group') or ""
-        self.ansible_name = srv.metadata.get('ansible_name') or ""
+        self.ansible_name = srv.metadata.get('ansible_name').lower() or ""
         self.name_intrf = srv.metadata.get('name_intrf') or ""
         self.platform = srv.metadata.get('platform') or ""
         self.img_metadata = metdata.metadata
-        # print(f'metdata: {self.img_metadata}')
+        # print(f"metdata: {self.img_metadata} platform: {srv.metadata.get('platform')}")
         # if len(srv.metadata) > 0:
         #     # print(f'name: {self.name} metdata: {srv.metadata}')
         #     self.srv_group = srv.metadata['group']
@@ -362,6 +362,7 @@ class Servers:
                 user_name = 'admin'
             srv_ips[srv.ansible_name] = {'ipv4': srv.nets[net_name]['ipv4'], 'groups': srv.srv_group.split(',')}
             srv_ips[srv.ansible_name]['platform'] = srv.platform
+            # print(f'{srv.platform}')
             if 'ansible_connection' in srv.img_metadata:
                 # print(f'met: {srv.img_metadata["ssh_user"]}')
                 srv_ips[srv.ansible_name]['ansible_connection'] = srv.img_metadata["ansible_connection"]

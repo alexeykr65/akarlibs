@@ -139,13 +139,16 @@ resources:
 ##################################################################
 # create server {{ rt_name }} {{ rt_value.dev_name }}
 ##################################################################
-    {% if rt_value.dev_type == 'vmanage' %}
+    {% if dvsinfo.imgs_info[rt_value.dev_type].volume_enable == true %}
     init_{{ rt_value.dev_name }}:
       type: OS::Cinder::Volume
       properties:
+        {% if dvsinfo.imgs_info[rt_value.dev_type].volume_image == true %}
+        image: { get_param: {{ rt_value.dev_type }}_image }
+        {% endif %}
         name: 
           list_join: ['-', [{ get_param: "OS::stack_name" }, "vol", "{{ rt_value.dev_name }}"] ] 
-        size: 100
+        size: {{ dvsinfo.imgs_info[rt_value.dev_type].volume_size }}
     {% endif %}    
 
     {{ rt_name }}:
@@ -156,18 +159,24 @@ resources:
     {% else %}
         availability_zone: { get_param: avail_zone }
     {% endif %}
+        {% if dvsinfo.imgs_info[rt_value.dev_type].volume_image == false %}
         image: { get_param: {{ rt_value.dev_type }}_image }
-        flavor: { get_param: {{ rt_value.dev_type }}_flavor }
+        {% endif %}
+        {% if rt_value.flavor|length > 0 %}
+        flavor: {{ rt_value.flavor }}
+        {% else %}
+        flavor: { get_param: {{ rt_value.dev_type }}_flavor }        
+        {% endif %}
         key_name: { get_param: key_name }
     {% if rt_value.dev_group|length > 0 %}
-        metadata: { group: {{rt_value.dev_group}}, ansible_name: {{rt_value.dev_name}} }
+        metadata: { group: {{rt_value.dev_group|lower}}, ansible_name: {{rt_value.dev_name|lower}}, platform: {{dvsinfo.imgs_info[rt_value.dev_type].platform}} }
         {# tags: [{{rt_value.dev_group}}] #}
     {% endif %}
         name:
-          list_join: ['_', [{ get_param: "OS::stack_name" }, "{{ rt_value.dev_name }}"] ] 
-    {% if rt_value.dev_type == 'vmanage' %}
-        block_device_mapping: 
-          - { device_name: 'vdb', volume_id: { get_resource: init_{{ rt_value.dev_name }} }, delete_on_termination: true }
+          list_join: ['_', [{ get_param: "OS::stack_name" }, "{{ rt_value.dev_name|lower }}"] ] 
+    {% if dvsinfo.imgs_info[rt_value.dev_type].volume_enable %}
+        block_device_mapping:
+          - { device_name: {{ dvsinfo.imgs_info[rt_value.dev_type].volume_device }}, volume_id: { get_resource: init_{{ rt_value.dev_name }} }, delete_on_termination: true }
     {% endif %}
     {% if rt_value.cloud_init_cloudconfig|length > 0 %}
         user_data_format: RAW
@@ -199,10 +208,14 @@ resources:
       type: OS::Nova::Server 
       properties: 
         image: { get_param: {{ rt_value.dev_type }}_image}
-        flavor: { get_param: {{ rt_value.dev_type }}_flavor}
+        {% if rt_value.flavor|length > 0 %}
+        flavor: {{ rt_value.flavor }}
+        {% else %}
+        flavor: { get_param: {{ rt_value.dev_type }}_flavor }        
+        {% endif %}        
         key_name: { get_param: key_name }
     {% if rt_value.dev_group|length > 0 %}
-        metadata: { group: {{ rt_value.dev_group }}, ansible_name: {{rt_value.dev_name}}, name_intrf: {{dvsinfo.imgs_info[rt_value.dev_type].name_intrf}}, platform: {{dvsinfo.imgs_info[rt_value.dev_type].platform}} }
+        metadata: { group: {{ rt_value.dev_group|lower }}, ansible_name: {{ rt_value.dev_name|lower }}, name_intrf: {{dvsinfo.imgs_info[rt_value.dev_type].name_intrf}}, platform: {{dvsinfo.imgs_info[rt_value.dev_type].platform}} }
         {# tags: [{{rt_value.dev_group}}] #}
     {% endif %}
     {% if rt_value.dev_host|length > 0 %}
@@ -212,7 +225,7 @@ resources:
     {% endif %}
         config_drive: True
         name: 
-          list_join: ['_', [{ get_param: "OS::stack_name" }, "{{ rt_value.dev_name }}"] ] 
+          list_join: ['_', [{ get_param: "OS::stack_name" }, "{{ rt_value.dev_name|lower }}"] ] 
     {% if rt_value.dev_type == 'csr' %}
         personality: 
           "iosxe_config.txt": { str_replace_strict: { template: {get_param: csr_config}, params: { 
@@ -365,6 +378,9 @@ resources:
         port_security_enabled: false
         name:
           list_join: ['_', [{ get_param: "OS::stack_name" }, '{{ rt_value.dev_name }}_MGMT_port'] ]
+{%      if rt_value.mac_address|length %}
+        mac_address: '{{ rt_value.mac_address }}'
+{%      endif %}
         fixed_ips:
 {%      if rt_value.dev_mgmt_ipv4|length %}
           - ip_address: '{{ rt_value.dev_mgmt_ipv4 }}'

@@ -1,0 +1,8 @@
+---
+{%  for role in data %}
+- name: {{ role|upper() }}==>> Play role {{ role }}
+  hosts: {{ data[role]|list() }}
+  gather_facts: False
+  roles:
+    - role: {{ role }}
+{%  endfor %}

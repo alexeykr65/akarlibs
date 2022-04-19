@@ -1,0 +1,20 @@
+all:
+  hosts:
+{%  for hst in data.inventory.hosts %}
+    {{ hst | lower }}:
+      ansible_host: {{ data.inventory.hosts[hst].hostname }}
+      {% if 'ansible_roles' in data.inventory.hosts[hst].data['lab_config'] %}
+        {% for role in data.inventory.hosts[hst].data['lab_config']['ansible_roles'] %}
+      {{ role }}: True
+        {%  endfor %}
+        {%  endif %}
+      net_os: {{ data.inventory.hosts[hst].platform }}
+
+{%  endfor %}
+  vars:
+    ansible_connection: ssh
+    ansible_user: root
+    ansible_python_interpreter: "/usr/bin/python3"
+
+
+
